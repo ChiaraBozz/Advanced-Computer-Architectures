@@ -29,7 +29,7 @@ In this way, your exercise implementations are saved in your personal GitHub pro
 ## Usage
 In the exercise directory, create the build folder, launch the cmake command and compile the sources:
 ```bash
-cd <lesson-folder>
+cd <lesson-folder>/<exercise-name>
 
 # Only the first time
 mkdir build
