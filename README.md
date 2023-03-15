@@ -3,41 +3,34 @@ Course material for Advanced Computer Architectures course.
 
 ## Getting started with the repo
 
-### Fork the repository
+### Clone the repository
 
-Fork the repo using the proper button, as shown below:
+```bash
+git clone https://github.com/PARCO-LAB/Advanced-Computer-Architectures.git
+```
+
+Follow the lessons and solve the exercises by keeping your solutions local.
+
+### Fork the repository and save the changes
+
+If you want to save your solutions remotely, fork the main repository: 
 
 ![Alt Text](https://github.com/PARCO-LAB/Advanced-Computer-Architectures/blob/main/figures/fork.png)
 
-### Clone your fork
-To be able to work on the project, you will need to clone it to the device.
-
-Copy the path, as shown below:
-
-![Cloning](https://github.com/PARCO-LAB/Advanced-Computer-Architectures/blob/main/figures/clone.png)
-
-Create a folder with your name and surname, then 
-
-```bash
-mkdir ACA/<name>_<surname>
-git clone <link copied from GitHub>
-```
-
-### Do your excercise and save the changes
-Go ahead and complete the excercises. When you’re ready to submit your changes, stage and commit your changes.
-
-In the project root folder, type:
+Clone the repository forked in your GitHub profile and solve the exercises. When you’re ready to submit your changes, stage and commit your changes as the following:
 ```bash
 git add .
 git commit -m "<comment to the changes>"
 git push
 ```
 
-In this way, your excercise implementations are saved in your personal GitHub profile.
+In this way, your exercise implementations are saved in your personal GitHub profile.
 
 ## Usage
-In the excercise directory, create the build folder, launch the cmake command and compile the sources:
+In the exercise directory, create the build folder, launch the cmake command and compile the sources:
 ```bash
+cd <lesson-folder>
+
 # Only the first time
 mkdir build
 cd build
@@ -66,7 +59,7 @@ sudo nvpmodel -m<n> # (The number may change, depending on the device, for TX2 <
 sudo jetson_clocks
 ```
 
-## Hardware details
+## Hardware details (only for NVIDIA Jetson)
 To have a complete overview of the Jetson hardware status, type:
 ```bash
 sudo jtop

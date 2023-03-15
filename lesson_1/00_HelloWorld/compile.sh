@@ -1,6 +1,9 @@
 #!/bin/bash
 DIR=`dirname $0`
 
-#nvcc -std=c++11 -arch=sm_62 "$DIR"/HelloWorld.cu -o hello_world
+#g++-9 -std=c++11 -fopenmp "$DIR"/HelloWorld.cpp -o hello_world
+#g++-9 -std=c++14 -O3 -fopenmp "$DIR"/HelloWorld.cpp -o hello_world_O3
 
-nvcc -w -std=c++11 "$DIR"/HelloWorld.cu -o hello_world
+g++-9 -std=c++11 -fopenmp "$DIR"/HelloWorld.cpp -o hello_world
+./hello_world
+

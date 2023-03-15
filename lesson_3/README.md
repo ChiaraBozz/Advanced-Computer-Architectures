@@ -1,33 +1,37 @@
-## 00. Vector Reduction
 
-<img src="https://github.com/PARCO-LAB/Advanced-Computer-Architectures/blob/main/figures/l3_00.jpg" width="500" height=auto> 
+## 01. VectorAdd
 
-Suggestion: use BLOCK_SIZE=256. Note that [@micheleboldo](https://github.com/micheleboldo)'s implementation uses BLOCK_SIZE=128.
-Starting from the idea of [@micheleboldo](https://github.com/micheleboldo), the implementation of [@xaldyz](https://github.com/xaldyz) uses BLOCK_SIZE=64.
+<img src="https://github.com/PARCO-LAB/Advanced-Computer-Architectures/blob/main/figures/l1_01.jpg" width="500" height=auto> 
 
-### Performance reference table (N = 16777216):
-CPU time   | GPU time | Speedup  | Device             | Mode  |Author
------------| -------- | -------- | ------------------ | ----  |------
-73 ms   | 21 ms    | 3x      | Nvidia Jetson TX2  | Shared Divergence | -
-73 ms   | 12 ms    | 5x      | Nvidia Jetson TX2  | Shared Less Divergence | -
-73 ms   | 9 ms     | 7x      | Nvidia Jetson TX2  | Last Warp Opt | -
-73 ms   | 5 ms     | 13x     | Nvidia Jetson TX2  | Custom | [@micheleboldo](https://github.com/micheleboldo)
-73 ms   | 3 ms     | **24x**     | Nvidia Jetson TX2  | Custom | [@xaldyz](https://github.com/xaldyz)
+### Performance reference table:
+CPU time | GPU time | Speedup |Device             | Author
+---------| -------- | ------- | ------------------| ------
+894 ms   | 29 ms    | 29x     | Nvidia Jetson TX2 | -
 
-### Performance reference table - Other Devices (N = 16777216):
-CPU time   | GPU time | Speedup  | Device             | Mode  |Author
------------| -------- | -------- | ------------------ | ----  |------
-32.9 ms   | 3.8 ms    | 8.7x     | i7 6700K, GTX 1060 (6GB) | Shared Divergence | [@micheleboldo](https://github.com/micheleboldo)
-33.4 ms   | 2.1 ms    | 3.5x     | i7 6700K, GTX 1060 (6GB)  | Shared Less Divergence | [@micheleboldo](https://github.com/micheleboldo)
-33.3 ms   | 0.9 ms    | 13x     | i7 6700K, GTX 1060 (6GB)  | Custom | [@micheleboldo](https://github.com/micheleboldo)
+## 02. 1DStencil
 
-## 01. Prefix Scan
+<img src="https://github.com/PARCO-LAB/Advanced-Computer-Architectures/blob/main/figures/l1_02.jpg" width="500" height=auto> 
 
-<img src="https://github.com/PARCO-LAB/Advanced-Computer-Architectures/blob/main/figures/l3_01.jpg" width="500" height=auto> 
+### Performance reference table (N = 100 000 000):
+CPU time   | GPU time | Speedup  | Device             | Author
+-----------| -------- | -------- | ------------------ | ------
+13640 ms   | 92 ms    | 149x     | Nvidia Jetson TX2  | -
 
-### Performance reference table (N = 67108864):
+## 03. MatrixMultiplication
 
-CPU time   | GPU time | Speedup  | Device             | Mode  |Author
------------| -------- | -------- | ------------------ | ----  |------
-716 ms   | 73 ms    | 9x     | Nvidia Jetson TX2  | Naive | -
-722 ms   | 110 ms   | 6x     | Nvidia Jetson TX2  | Up Down Sweep | -
+
+<img src="https://github.com/PARCO-LAB/Advanced-Computer-Architectures/blob/main/figures/l1_03.jpg" width="500" height=auto> 
+
+### Performance reference table (N = 1024):
+CPU time   | GPU time | Speedup  | Device             | Author
+-----------| -------- | -------- | ------------------ | ------
+52100 ms   | 84 ms    | 614x     | Nvidia Jetson TX2  | -
+
+## 04. MatrixTranspose
+
+<img src="https://github.com/PARCO-LAB/Advanced-Computer-Architectures/blob/main/figures/l1_04.jpg" width="500" height=auto> 
+
+### Performance reference table (N = 8192):
+CPU time   | GPU time | Speedup  | Device             | Author
+-----------| -------- | -------- | ------------------ | ------
+5474 ms   | 65 ms     | 82x     | Nvidia Jetson TX2   | -

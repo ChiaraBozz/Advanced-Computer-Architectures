@@ -1,24 +1,13 @@
-## 00. Fibonacci
+## 00. Gaussian Blur
 
-<img src="https://github.com/PARCO-LAB/Advanced-Computer-Architectures/blob/main/figures/l6_00.jpg" width="500" height=auto> 
+*A Gaussian Blur is basically a matrix multiplication operation in which a pixel is
+chose as center and all the adjacent pixels, into a predetermined radius, are used to
+modify the center pixel value, using a weight (sigma) to decide how each pixel
+contributes to the final value.*
 
-### Performance reference table (N = 44):
+<img src="https://github.com/PARCO-LAB/Advanced-Computer-Architectures/blob/main/figures/l4_00.jpg" width="500" height=auto> 
 
-CPU time   | CPU* time | Speedup  | Device             | Mode  |Author
+### Performance reference table
+CPU time   | GPU time | Speedup  | Device             | Mode  |Author
 -----------| -------- | -------- | ------------------ | ----  |------
-15567 ms   | 7753 ms    | 2x     | Nvidia Jetson TX2  | OpenMP (-O0) | -
-
-## 01. QuickSort
-
-<img src="https://github.com/PARCO-LAB/Advanced-Computer-Architectures/blob/main/figures/l6_01.jpg" width="500" height=auto> 
-
-### Performance reference table (N = 1 << 20):
-
-CPU time   | CPU* time | Speedup  | Device             | Mode  |Author
------------| -------- | -------- | ------------------ | ----  |------
-23693 ms   | 6499 ms    | 3x     | Nvidia Jetson TX2  | OpenMP (-O0) | -
-
-## 02. ProducerConsumer
-
-<img src="https://github.com/PARCO-LAB/Advanced-Computer-Architectures/blob/main/figures/l6_02.jpg" width="500" height=auto> 
 
