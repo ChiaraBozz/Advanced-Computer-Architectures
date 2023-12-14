@@ -8,7 +8,7 @@ using namespace timer;
 
 const int RADIUS = 7;
 
-const int BLOCK_SIZE = 128;
+const int BLOCK_SIZE = 256;
 const int SHMEM_SIZE = BLOCK_SIZE + 2*RADIUS;
 const int N  = 100000000;
 
