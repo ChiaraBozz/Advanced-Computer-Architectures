@@ -17,6 +17,7 @@ void vectorAddKernel(const int* d_inputA,
 }
 
 const int N = 100000000;
+const int BLOCK_SIZE = 256;
 
 int main(){
     Timer<DEVICE> TM_device;
@@ -64,9 +65,9 @@ int main(){
 
     // -------------------------------------------------------------------------
     // DEVICE INIT
-    dim3 DimGrid(N/256, 1, 1);
-    if (N%256) DimGrid.x++;
-    dim3 DimBlock(256, 1, 1);
+    dim3 DimGrid(N/BLOCK_SIZE, 1, 1);
+    if (N%BLOCK_SIZE) DimGrid.x++;
+    dim3 DimBlock(BLOCK_SIZE, 1, 1);
               
     // -------------------------------------------------------------------------
     // DEVICE EXECUTION
