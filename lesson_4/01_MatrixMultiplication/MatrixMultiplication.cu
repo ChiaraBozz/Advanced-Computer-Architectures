@@ -13,15 +13,6 @@ const int BLOCK_SIZE_Y = 16;
 const int N = 1024; //300;
 const int TILE_WIDTH = 16;
 
-/*
-__global__
-void matrixMultiplicationKernel(const int* d_matrixA,
-                                const int* d_matrixB,
-                                int        N,
-                                int*       d_matrixC) {
-    /// YOUR CODE
-}*/
-
 __global__ void matrixMultiplicationKernel(int* d_matrixA, int* d_matrixB, int N, int* d_matrixC) {
     __shared__ int ds_M[TILE_WIDTH][TILE_WIDTH];
     __shared__ int ds_N[TILE_WIDTH][TILE_WIDTH];

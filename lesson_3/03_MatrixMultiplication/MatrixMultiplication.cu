@@ -81,12 +81,9 @@ int main() {
     // DEVICE EXECUTION
     TM_device.start();
 
-     dim3 block_size(N/BLOCK_SIZE_X, N/BLOCK_SIZE_Y, 1);
-     if (N%BLOCK_SIZE_X) block_size.x++;
-     if (N%BLOCK_SIZE_Y) block_size.y++;
-     dim3 num_blocks(BLOCK_SIZE_X, BLOCK_SIZE_Y, 1);
-    
-    matrixMultiplicationKernel<<<block_size, num_blocks>>>(d_matrixA, d_matrixB, N, d_matrixC);
+    dim3 num_blocks(ceil(N/BLOCK_SIZE_X), ceil(N/BLOCK_SIZE_Y), 1 );
+    dim3 block_size( BLOCK_SIZE_X, BLOCK_SIZE_Y, 1 );
+    matrixMultiplicationKernel<<< num_blocks, block_size >>>(d_matrixA, d_matrixB, N, d_matrixC);
 
     CHECK_CUDA_ERROR
     TM_device.stop();
