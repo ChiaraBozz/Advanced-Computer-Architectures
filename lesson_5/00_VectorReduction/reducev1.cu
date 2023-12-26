@@ -1,6 +1,6 @@
 /*
 Vector Reduction for large arrays 
-v1: with shared memory and divergent
+v1: without shared memory
 */
 
 #include <iostream>
@@ -20,23 +20,20 @@ using namespace timer;
 
 __global__ void ReduceKernel(int* VectorIN, int N) {
     int globalIdx = threadIdx.x + blockIdx.x * blockDim.x;
-    __shared__ int shmem[SHMEM_SIZE];
 
     if(globalIdx < N){
-        
-        shmem[threadIdx.x] = VectorIN[globalIdx];
-        __syncthreads();
-
-        for(int i= 1; i < blockDim.x; i*=2){
+        for(int i= 1; i < blockDim.x && i < N; i*=2){
             if( threadIdx.x % (i*2) == 0)   
-                if( globalIdx + i < N)   {
-                    shmem[ threadIdx.x ] = shmem[ threadIdx.x ] + shmem[ threadIdx.x + i];
-                    //printf("%i: %i + %i\n", globalIdx, shmem[ threadIdx.x ], shmem[ threadIdx.x + i]);
+                if( globalIdx + i < (blockIdx.x+1) * blockDim.x && globalIdx + i < N)   {
+                    //printf("\n%i: %i + %i = %i ", globalIdx, VectorIN[globalIdx], VectorIN[globalIdx + i],  VectorIN[globalIdx] + VectorIN[globalIdx + i]);
+                    VectorIN[globalIdx] = VectorIN[globalIdx] + VectorIN[globalIdx + i];
+                    //shmem[ threadIdx.x ] = shmem[ threadIdx.x ] + shmem[ threadIdx.x + i];
                 }
             __syncthreads();
+
         }
         if(threadIdx.x == 0)
-            VectorIN[blockIdx.x] = shmem[threadIdx.x];
+            VectorIN[blockIdx.x] = VectorIN[globalIdx];
     }
 }
 
@@ -83,36 +80,44 @@ int main(int argc, char *argv[]) {
     std::cout<<"Starting computation on DEVICE "<<std::endl;
 
     dev_TM.start();
-
-    //ReduceKernel<<<DIV(N, BLOCK_SIZE), BLOCK_SIZE>>>(devVectorIN, N);
+/*
+    ReduceKernel<<<DIV(N, BLOCK_SIZE), BLOCK_SIZE>>>(devVectorIN, N);
     
-    //printf("GridDim: %i, %i\t%i\n", DIV(N, BLOCK_SIZE), BLOCK_SIZE, N);
-    //int* partialRes = new int[N];
-    //SAFE_CALL( cudaMemcpy(partialRes, devVectorIN,  N * sizeof(int), cudaMemcpyDeviceToHost) );
-    //for (int i = 0; i < N; ++i) {printf("%i ", partialRes[i]);}printf("\n");
+    printf("GridDim: %i, %i\t%i\n", DIV(N, BLOCK_SIZE), BLOCK_SIZE, N);
+    int* partialRes = new int[N];
+    SAFE_CALL( cudaMemcpy(partialRes, devVectorIN,  N * sizeof(int), cudaMemcpyDeviceToHost) );
+    for (int i = 0; i < N; ++i) {printf("%i ", partialRes[i]);}printf("\n");
 
-    //ReduceKernel<<<DIV(N, BLOCK_SIZE* BLOCK_SIZE), BLOCK_SIZE>>>(devVectorIN, DIV(N, BLOCK_SIZE));
+    ReduceKernel<<<DIV(N, BLOCK_SIZE* BLOCK_SIZE), BLOCK_SIZE>>>(devVectorIN, DIV(N, BLOCK_SIZE));
     
-    //printf("GridDim: %i, %i\t%i\n", DIV(N, BLOCK_SIZE* BLOCK_SIZE), BLOCK_SIZE, DIV(N, BLOCK_SIZE));
-    //SAFE_CALL( cudaMemcpy(partialRes, devVectorIN,  N * sizeof(int), cudaMemcpyDeviceToHost) );
-    //for (int i = 0; i < N; ++i) {printf("%i ", partialRes[i]);}printf("\n");
+    printf("GridDim: %i, %i\t%i\n", DIV(N, BLOCK_SIZE* BLOCK_SIZE), BLOCK_SIZE, DIV(N, BLOCK_SIZE));
+    SAFE_CALL( cudaMemcpy(partialRes, devVectorIN,  N * sizeof(int), cudaMemcpyDeviceToHost) );
+    for (int i = 0; i < N; ++i) {printf("%i ", partialRes[i]);}printf("\n");
 	
-    //ReduceKernel<<<DIV(N, BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE), BLOCK_SIZE>>>(devVectorIN, DIV(N, BLOCK_SIZE * BLOCK_SIZE));
+    ReduceKernel<<<DIV(N, BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE), BLOCK_SIZE>>>(devVectorIN, DIV(N, BLOCK_SIZE * BLOCK_SIZE));
     //printf("GridDim: %i, %i\t%i\n", DIV(N, BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE), BLOCK_SIZE,  DIV(N, BLOCK_SIZE*BLOCK_SIZE));
-
-    /**/
+*/
+   
     int i = BLOCK_SIZE;
     int GridDim = DIV(N, BLOCK_SIZE);
     int dimArray = N;
     do{  
         ReduceKernel<<< GridDim , BLOCK_SIZE>>>(devVectorIN, dimArray); 
-        //printf("GridDim: %i, %i\t%i\n", GridDim, i, dimArray);
+        int* partialRes = new int[N];
+        SAFE_CALL( cudaMemcpy(partialRes, devVectorIN,  N * sizeof(int), cudaMemcpyDeviceToHost) );
+        
+        printf("GridDim: %i, %i\t%i\n", GridDim, i, dimArray);
         dimArray = DIV(N, i);
         i *= BLOCK_SIZE;
         GridDim = DIV(N, i);
+
+        for (int i = 0; i < dimArray+5; ++i) {printf("%i ", partialRes[i]);}printf("\n");
     }while(GridDim != 1);
-    //printf("GridDim: %i, %i\t%i\n", GridDim, i, dimArray);
+    printf("GridDim: %i, %i\t%i\n", GridDim, i, dimArray);
     ReduceKernel<<< GridDim , BLOCK_SIZE>>>(devVectorIN, dimArray); 
+    int* partialRes = new int[N];
+        SAFE_CALL( cudaMemcpy(partialRes, devVectorIN,  N * sizeof(int), cudaMemcpyDeviceToHost) );
+        for (int i = 0; i < N; ++i) {printf("%i ", partialRes[i]);}printf("\n");
 
 	dev_TM.stop();
 	dev_time = dev_TM.duration();
