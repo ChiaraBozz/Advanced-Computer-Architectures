@@ -27,11 +27,17 @@ def refine_results(result):
 
 
 if __name__ == "__main__":
-    input_tuple = [(16777216, 256),(16777216, 32),(76744, 32)]
+    input_tuple = [#(16777216, 1024),(16777216, 512),(16777216, 256),(16777216, 32),
+                    (1024, 32), (1024, 256),
+                    (2048, 32), (2048, 256),
+                   (76744, 32), 
+                   #(402400000, 1024)
+                   ]
+    #input_tuple = [(16777216, 256),(16777216, 32),(76744, 32), (1024, 17), (3777, 32), (4048, 27), (1048576, 256), (33554432, 512)]
+    programs = ["./reduce", "./reduce_without_shmem", "./reduce_shmem_less_div", "./reduce_task_par"]
+    #programs = ["./reduce_task_par"]
     list_data = []
     
-    programs = ["./reduce", "./reduce_without_shmem"]
-
     for input in input_tuple:
         for program in programs:
             #N, BLOCK_SIZE = 16000, 32
@@ -60,7 +66,7 @@ if __name__ == "__main__":
                 print(data)
 
     json_file_path = "example.json"
-    
+
     with open(json_file_path, 'w') as json_file:
         json.dump(list_data, json_file, indent=2)
 

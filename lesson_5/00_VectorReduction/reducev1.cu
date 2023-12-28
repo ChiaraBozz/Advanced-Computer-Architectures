@@ -18,7 +18,7 @@ using namespace timer;
 //#define BLOCK_SIZE 256//5
 #define SHMEM_SIZE 1024
 
-__global__ void ReduceKernel(int* VectorIN, int N) {
+__global__ void ReduceKernel(int* VectorIN, int N, int* VectorOUT) {
     int globalIdx = threadIdx.x + blockIdx.x * blockDim.x;
 
     if(globalIdx < N){
@@ -26,14 +26,32 @@ __global__ void ReduceKernel(int* VectorIN, int N) {
             if( threadIdx.x % (i*2) == 0)   
                 if( globalIdx + i < (blockIdx.x+1) * blockDim.x && globalIdx + i < N)   {
                     //printf("\n%i: %i + %i = %i ", globalIdx, VectorIN[globalIdx], VectorIN[globalIdx + i],  VectorIN[globalIdx] + VectorIN[globalIdx + i]);
+                    //VectorOUT[globalIdx] = VectorIN[globalIdx] + VectorIN[globalIdx + i];
                     VectorIN[globalIdx] = VectorIN[globalIdx] + VectorIN[globalIdx + i];
                     //shmem[ threadIdx.x ] = shmem[ threadIdx.x ] + shmem[ threadIdx.x + i];
                 }
+                //else if( globalIdx < (blockIdx.x+1) * blockDim.x)
+                //    VectorOUT[globalIdx] = VectorIN[globalIdx];
             __syncthreads();
 
         }
-        if(threadIdx.x == 0)
-            VectorIN[blockIdx.x] = VectorIN[globalIdx];
+        VectorOUT[globalIdx] = VectorIN[globalIdx];     //to avoid race conditions like:
+                                                        /*  0: 0 : 450 
+                                                            4: 2 : 9 
+                                                            2: 1 : 458 
+                                                            After0: 0 : 450 
+                                                            After4: 2 : 9 
+                                                            After2: 1 : 9 
+                                                            final result:   450 9 9
+                                                            instead of:     450 458 9    
+                                                        */
+        __syncthreads(); 
+
+        if(threadIdx.x == 0){
+            //printf("\n%i: %i : %i ", globalIdx, blockIdx.x, VectorOUT[globalIdx]);
+            VectorIN[blockIdx.x] = VectorOUT[globalIdx];
+            //printf("\nAfter%i: %i : %i ", globalIdx, blockIdx.x, VectorIN[blockIdx.x]);
+        }
     }
 }
 
@@ -67,10 +85,14 @@ int main(int argc, char *argv[]) {
     }
 	// ------------------- CUDA INIT -------------------------------------------
 
-	int* devVectorIN;
+	int* devVectorIN; 
+    int* devVectorOUT;
+
 	SAFE_CALL( cudaMalloc(&devVectorIN, N * sizeof(int)) );
+	SAFE_CALL( cudaMalloc(&devVectorOUT, N * sizeof(int)) );
 	
 	SAFE_CALL( cudaMemcpy(devVectorIN, VectorIN, N * sizeof(int), cudaMemcpyHostToDevice) );
+	SAFE_CALL( cudaMemcpy(devVectorOUT, VectorIN, N * sizeof(int), cudaMemcpyHostToDevice) );
 	
 	int sum;
 	float dev_time;
@@ -101,23 +123,23 @@ int main(int argc, char *argv[]) {
     int i = BLOCK_SIZE;
     int GridDim = DIV(N, BLOCK_SIZE);
     int dimArray = N;
-    do{  
-        ReduceKernel<<< GridDim , BLOCK_SIZE>>>(devVectorIN, dimArray); 
-        int* partialRes = new int[N];
-        SAFE_CALL( cudaMemcpy(partialRes, devVectorIN,  N * sizeof(int), cudaMemcpyDeviceToHost) );
-        
-        printf("GridDim: %i, %i\t%i\n", GridDim, i, dimArray);
+    do{ 
+        ReduceKernel<<< GridDim , BLOCK_SIZE>>>(devVectorIN, dimArray, devVectorOUT); 
+        //int* partialRes = new int[N];
+        //SAFE_CALL( cudaMemcpy(partialRes, devVectorIN,  N * sizeof(int), cudaMemcpyDeviceToHost) );
+        //printf("GridDim: %i, %i\t%i\n", GridDim, i, dimArray);
         dimArray = DIV(N, i);
         i *= BLOCK_SIZE;
         GridDim = DIV(N, i);
 
-        for (int i = 0; i < dimArray+5; ++i) {printf("%i ", partialRes[i]);}printf("\n");
+        //for (int i = 0; i < dimArray; ++i) {printf("%i ", partialRes[i]);}printf("\n");
     }while(GridDim != 1);
-    printf("GridDim: %i, %i\t%i\n", GridDim, i, dimArray);
-    ReduceKernel<<< GridDim , BLOCK_SIZE>>>(devVectorIN, dimArray); 
-    int* partialRes = new int[N];
-        SAFE_CALL( cudaMemcpy(partialRes, devVectorIN,  N * sizeof(int), cudaMemcpyDeviceToHost) );
-        for (int i = 0; i < N; ++i) {printf("%i ", partialRes[i]);}printf("\n");
+    
+    //printf("GridDim: %i, %i\t%i\n", GridDim, i, dimArray);
+    ReduceKernel<<< GridDim , BLOCK_SIZE>>>(devVectorIN, dimArray, devVectorOUT); 
+    //int* partialRes = new int[N];
+    //SAFE_CALL( cudaMemcpy(partialRes, devVectorIN,  N * sizeof(int), cudaMemcpyDeviceToHost) );
+    //for (int i = 0; i < N; ++i) {printf("%i ", partialRes[i]);}printf("\n");
 
 	dev_TM.stop();
 	dev_time = dev_TM.duration();
