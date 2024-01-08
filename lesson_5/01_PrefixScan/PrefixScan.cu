@@ -1,15 +1,38 @@
+/*
+Prefix Sum for large arrays 
+v1: naive
+*/
 #include <iostream>
 #include <chrono>
 #include <random>
 #include "Timer.cuh"
+#include "CheckError.cuh"
+#include <cmath>
+#include <cuda_runtime.h>
+#include <device_launch_parameters.h>
+#include <cstdlib>
 
 using namespace timer;
-using namespace timer_cuda;
+//using namespace timer_cuda;
 
 const int BLOCK_SIZE = 512;
 
 __global__ void PrefixScan(int* VectorIN, int N) {
-	
+	int offset;
+	int i = blockDim.x * blockIdx.x + threadIdx.x;
+	if(i < N)
+		for(int level = 0; level < log2f(N); ++level){
+			//printf("%f \n", floor(log2f(N)));
+			offset = pow(2, level); //2^level
+			if(i >= offset)
+				VectorIN[i] = VectorIN[i - offset] + VectorIN[i];
+			__syncthreads();
+			/*if(threadIdx.x == 0){
+				for (int i = 0; i < N; ++i){
+					printf("%i ", VectorIN[i]);
+				} printf("\n");
+			}*/
+		}
 }
 
 void printArray(int* Array, int N, const char str[] = "") {
@@ -19,23 +42,23 @@ void printArray(int* Array, int N, const char str[] = "") {
 	std::cout << std::endl << std::endl;
 }
 
-
 #define DIV(a,b)	(((a) + (b) - 1) / (b))
 
 int main() {
 	const int blockDim = BLOCK_SIZE;
-	const int N = BLOCK_SIZE * 131072;
-
-
+	//const int N = BLOCK_SIZE * 131072;
+	const int N = 150;
     // ------------------- INIT ------------------------------------------------
 
     // Random Engine Initialization
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+	seed = 0;
     std::default_random_engine generator (seed);
     std::uniform_int_distribution<int> distribution(1, 100);
 
-    timer::Timer<HOST> host_TM;
-    timer_cuda::Timer<DEVICE> dev_TM;
+    Timer<HOST> host_TM;
+    //Timer<DEVICE> dev_TM;
+	Timer<HOST> dev_TM;
 
 	// ------------------ HOST INIT --------------------------------------------
 
@@ -46,8 +69,8 @@ int main() {
 	// ------------------- CUDA INIT -------------------------------------------
 
 	int* devVectorIN;
-	__SAFE_CALL( cudaMalloc(&devVectorIN, N * sizeof(int)) );
-    __SAFE_CALL( cudaMemcpy(devVectorIN, VectorIN, N * sizeof(int), cudaMemcpyHostToDevice) );
+	SAFE_CALL( cudaMalloc(&devVectorIN, N * sizeof(int)) );
+    SAFE_CALL( cudaMemcpy(devVectorIN, VectorIN, N * sizeof(int), cudaMemcpyHostToDevice) );
 
 	int* prefixScan = new int[N];
 	float dev_time;
@@ -59,7 +82,7 @@ int main() {
 	dev_TM.stop();
 	dev_time = dev_TM.duration();
 
-	__SAFE_CALL(cudaMemcpy(prefixScan, devVectorIN, N * sizeof(int),
+	SAFE_CALL(cudaMemcpy(prefixScan, devVectorIN, N * sizeof(int),
                            cudaMemcpyDeviceToHost) );
 
 	// ------------------- CUDA ENDING -----------------------------------------
@@ -76,12 +99,23 @@ int main() {
 
     host_TM.stop();
 
-	if (!std::equal(host_result, host_result + blockDim - 1, prefixScan + 1)) {
+	
+	printArray(VectorIN, N, "Initial");
+	printArray(host_result, N, "CPU");
+	printArray(prefixScan, N, "GPU");/**/
+
+	for (int i = 0; i < N; ++i)
+		if(host_result[i] != prefixScan[i]){
+			std::cerr << " Error! :  prefixScan" << std::endl << std::endl;
+			cudaDeviceReset();
+			std::exit(EXIT_FAILURE);
+		}
+	/*if (!std::equal(host_result, host_result + blockDim - 1, prefixScan + 1)) {
 		std::cerr << " Error! :  prefixScan" << std::endl << std::endl;
 		cudaDeviceReset();
 		std::exit(EXIT_FAILURE);
-	}
-
+	}*/
+	
     // ----------------------- SPEEDUP -----------------------------------------
 
     float speedup1 = host_TM.duration() / dev_time;
@@ -94,7 +128,7 @@ int main() {
 	delete[] host_result;
     delete[] prefixScan;
     
-    __SAFE_CALL( cudaFree(devVectorIN) );
+    SAFE_CALL( cudaFree(devVectorIN) );
     
     cudaDeviceReset();
 }

@@ -1,110 +1,68 @@
-/*------------------------------------------------------------------------------
-Copyright © 2016 by Nicola Bombieri
-
-XLib is provided under the terms of The MIT License (MIT):
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-------------------------------------------------------------------------------*/
 /**
- * @author Federico Busato
- * Univerity of Verona, Dept. of Computer Science
- * federico.busato@univr.it
+ * @author Federico Busato                                                  <br>
+ *         Univerity of Verona, Dept. of Computer Science                   <br>
+ *         federico.busato@univr.it
+ * @date November, 2017
+ * @version v1.4
+ *
+ * @copyright Copyright © 2017 XLib. All rights reserved.
+ *
+ * @license{<blockquote>
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * * Redistributions of source code must retain the above copyright notice, this
+ *   list of conditions and the following disclaimer.
+ * * Redistributions in binary form must reproduce the above copyright notice,
+ *   this list of conditions and the following disclaimer in the documentation
+ *   and/or other materials provided with the distribution.
+ * * Neither the name of the copyright holder nor the names of its
+ *   contributors may be used to endorse or promote products derived from
+ *   this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ * </blockquote>}
+ *
+ * @file
  */
 #pragma once
 
-#include <string>
-#include <chrono>
-#include <iostream>
-#include <fstream>
 #include "Timer.hpp"
 
-//#include <cuda_runtime.h>
-#define getTimeErr(msg)			getTimeError((msg), __FILE__, __LINE__)
+namespace timer {
 
-namespace timer_cuda {
-
-enum timerType { DEVICE = 3	};			// Wall (real) clock device time
-
-/**
-* @class Timer
-* @brief Timer class for HOST and DEVICE
-* HOST timer: "HOST" (default) Wall (real) clock host time, "CPU" User time,
-* "SYS" User/Kernel/System time
-* "DEVICE" Wall clock device time
-*/
-template<timerType type>
-class Timer : public timer::Timer<timer::timerType::HOST> {
-private:
-	// DEVICE
-	cudaEvent_t startTimeCuda, stopTimeCuda;
+template<typename ChronoPrecision>
+class Timer<DEVICE, ChronoPrecision> final :
+                      public timer::detail::TimerBase<DEVICE, ChronoPrecision> {
 public:
-	/**
-	* Default costructor
-	*/
-#if defined(__COLOR)
-    Timer(int _decimals = 1, int _space = 1,
-            StreamModifier::Color color = StreamModifier::FG_DEFAULT);
-#else
-    Timer(int _decimals = 1, int _space = 1);
-#endif
-	Timer(std::ostream& _outStream, int _decimals = 1);
-    ~Timer();
+    explicit Timer(int decimals = 1, int space = 15,
+                   xlib::Color color = xlib::Color::FG_DEFAULT) noexcept;
 
-	/** Start the timer */
-	void start() override;
+    ~Timer() noexcept;
 
-	/** Stop the timer */
-	void stop() override;
+    void start() noexcept override;
 
-	/*
-	* Get the time elapsed between start() and stop()
-	* @return time elapsed
-	*/
-	template<typename _ChronoPrecision = std::chrono::duration<float,
-                                                               std::milli>>
-	float duration();
+    void stop()  noexcept override;
 
-	/*
-	* Print the time elapsed between start() and stop()
-	* if start() and stop() not invoked indef behavior
-	*/
-	template<typename _ChronoPrecision = std::chrono::duration<float,
-                                                               std::milli>>
-	void print(std::string str);
+private:
+    using detail::TimerBase<DEVICE, ChronoPrecision>::_time_elapsed;
+    using detail::TimerBase<DEVICE, ChronoPrecision>::_start_flag;
 
-	/*
-	* Stop the timer and print the time elapsed between start() and stop()
-	* if start() and stop() not invoked indef behavior
-	*/
-	template<typename _ChronoPrecision = std::chrono::duration<float,
-                                                               std::milli>>
-	void getTime(std::string str);
+    cudaEvent_t _start_event, _stop_event;
 
-	/*
-	* Stop the timer, check if error and print the time elapsed
-    * between start() and stop()
-	* if start() and stop() not invoked indef behavior
-	*/
-	template<typename _ChronoPrecision = std::chrono::duration<float,
-                                                               std::milli>>
-	void getTimeError(std::string str, const char* file, int line);
+    using detail::TimerBase<DEVICE, ChronoPrecision>::register_time;
 };
 
-} //@timer_cuda
+} // namespace timer
 
 #include "Timer.i.cuh"

@@ -1,114 +1,72 @@
-/*------------------------------------------------------------------------------
-Copyright © 2016 by Nicola Bombieri
-
-XLib is provided under the terms of The MIT License (MIT):
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-------------------------------------------------------------------------------*/
 /**
- * @author Federico Busato
- * Univerity of Verona, Dept. of Computer Science
- * federico.busato@univr.it
+ * @author Federico Busato                                                  <br>
+ *         Univerity of Verona, Dept. of Computer Science                   <br>
+ *         federico.busato@univr.it
+ * @date November, 2017
+ * @version v1.4
+ *
+ * @copyright Copyright © 2017 XLib. All rights reserved.
+ *
+ * @license{<blockquote>
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * * Redistributions of source code must retain the above copyright notice, this
+ *   list of conditions and the following disclaimer.
+ * * Redistributions in binary form must reproduce the above copyright notice,
+ *   this list of conditions and the following disclaimer in the documentation
+ *   and/or other materials provided with the distribution.
+ * * Neither the name of the copyright holder nor the names of its
+ *   contributors may be used to endorse or promote products derived from
+ *   this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ * </blockquote>}
  */
-#include <iomanip>				// set precision cout
-#include <ratio>
-#include "cuda_err.cuh"	// getLastError
+#include <cassert>
 
-namespace timer_cuda {
+namespace timer {
 
-template<timerType type>
-Timer<type>::Timer(std::ostream& _outStream, int _decimals) :
-            timer::Timer<timer::timerType::HOST>(_outStream, _decimals) {}
-
-#if defined(__COLOR)
-
-template<timerType type>
-Timer<type>::Timer(int _decimals, int _space, StreamModifier::Color _color) :
- 				   timer::Timer<timer::timerType::HOST>
-                   (_decimals, _space, _color) {
-	cudaEventCreate(&startTimeCuda);
-	cudaEventCreate(&stopTimeCuda);
+template<typename ChronoPrecision>
+Timer<DEVICE, ChronoPrecision>
+::Timer(int decimals, int space, xlib::Color color) noexcept :
+     timer::detail::TimerBase<DEVICE, ChronoPrecision>(decimals, space, color) {
+    cudaEventCreate(&_start_event);
+    cudaEventCreate(&_stop_event);
 }
 
-#else
-
-template<timerType type>
-Timer<type>::Timer(int _decimals, int _space) :
- 					 timer::Timer<timer::timerType::HOST>(_decimals, _space) {
-	cudaEventCreate(&startTimeCuda);
-	cudaEventCreate(&stopTimeCuda);
+template<typename ChronoPrecision>
+Timer<DEVICE, ChronoPrecision>::~Timer() noexcept {
+    cudaEventDestroy(_start_event);
+    cudaEventDestroy(_stop_event);
 }
 
-#endif
-
-
-template<timerType type>
-Timer<type>::~Timer() {
-    cudaEventDestroy( startTimeCuda );
-    cudaEventDestroy( stopTimeCuda );
+template<typename ChronoPrecision>
+void Timer<DEVICE, ChronoPrecision>::start() noexcept {
+    assert(!_start_flag);
+    _start_flag = true;
+    cudaEventRecord(_start_event, 0);
 }
 
-template<timerType type>
-template<typename _ChronoPrecision>
-void Timer<type>::print(std::string str) {
-    static_assert(timer::is_duration<_ChronoPrecision>::value,
-                  "Wrong type : typename is not std::chrono::duration");
-    std::cout __ENABLE_COLOR(<< this->defaultColor)
-              << std::right << std::setw(this->space - 2) << str << "  "
-              << std::fixed << std::setprecision(this->decimals)
-              << this->duration<_ChronoPrecision>()
-              << _ChronoPrecision()
-              __ENABLE_COLOR(<< StreamModifier::FG_DEFAULT)
-              << std::endl << std::endl;
+template<typename ChronoPrecision>
+void Timer<DEVICE, ChronoPrecision>::stop() noexcept {
+    float cuda_time_elapsed;
+    cudaEventRecord(_stop_event, 0);
+    cudaEventSynchronize(_stop_event);
+    cudaEventElapsedTime(&cuda_time_elapsed, _start_event, _stop_event);
+    auto  time_ms = timer::milli(cuda_time_elapsed);
+    _time_elapsed = std::chrono::duration_cast<ChronoPrecision>(time_ms);
+    register_time();
 }
 
-template<timerType type>
-template<typename _ChronoPrecision>
-void Timer<type>::getTime(std::string str) {
-    static_assert(timer::is_duration<_ChronoPrecision>::value,
-                  "Wrong type : typename is not std::chrono::duration");
-    this->stop();
-    this->print(str);
-}
-
-//-------------------------- HOST ----------------------------------------------
-
-template<>
-template<typename _ChronoPrecision>
-float Timer<DEVICE>::duration() {
-	static_assert(timer::is_duration<_ChronoPrecision>::value,
-                  "Wrong type : typename is not std::chrono::duration");
-	using float_milliseconds = typename std::chrono::duration<float,
-                                                              std::milli>;
-	float time;
-	cudaEventElapsedTime(&time, startTimeCuda, stopTimeCuda);
-	return std::chrono::duration_cast<_ChronoPrecision>(
-                                            float_milliseconds( time )).count();
-}
-
-template<>
-template<typename _ChronoPrecision>
-void Timer<DEVICE>::getTimeError(std::string str, const char* file, int line) {
-	static_assert(timer::is_duration<_ChronoPrecision>::value,
-                  "Wrong type : typename is not std::chrono::duration");
-	getTime<_ChronoPrecision>(str);
-	cudaDeviceSynchronize();
-	__getLastCudaError(str.c_str(), file, line);
-}
-
-} //@timer_cuda
+} // namespace timer
