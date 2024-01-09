@@ -17,46 +17,104 @@ using namespace timer;
 
 #define DIV(a,b)	(((a) + (b) - 1) / (b))
 
-//const int BLOCK_SIZE = 4;
+#define NUM 1024//512*512
+#define BLOCK_SIZE 1024
 
-__global__ void PrefixScan(int* VectorIN, int N) {
+#define NUM_BLOCKS ((NUM) + (BLOCK_SIZE) - 1) / (BLOCK_SIZE)
+
+//__device__ int finalarray[NUM_BLOCKS-1];
+
+__global__ void EndPrefixScan(int* VectorIN, int N, int* VectorADD) {
+	int tid = blockDim.x * blockIdx.x + threadIdx.x;
+
+	if(blockIdx.x > 0){
+		//printf("%i: %i \t%i\n", tid, VectorIN[tid], VectorADD[blockIdx.x-1]);
+		VectorIN[tid]+= VectorADD[blockIdx.x];
+	}
+}
+
+__global__ void PrefixScan(int* VectorIN, int N, int* VectorADD) {
 	//int offset;
-	int i = blockDim.x * blockIdx.x + threadIdx.x;
-	int step = 1;
-	if(i < N)
-		//for(int level = 0; level < ceil(log2f(N)); ++level){
-		printf("OK");
-		for(int limit = blockDim.x/2; limit > 0; limit/=2){
-			if(i < limit){
-				int valueRight = (i + 1) * (step * 2) - 1;
+	int tid = blockDim.x * blockIdx.x + threadIdx.x;
+	
+	int DIM;
+	if(N < blockDim.x){
+		DIM = N;
+	}else{
+		DIM = blockDim.x;
+	}
+
+	/*if(threadIdx.x == 0 && blockIdx.x == 1){
+		printf("INITIAL\n");
+		for (int i = 0; i < N; ++i){
+			printf("%i ", VectorIN[i]);
+		} printf("\n");
+	}
+	__syncthreads();*/
+
+  	if(tid < N){
+		int step = 1;
+		for(int limit = DIM/2; limit > 0; limit/=2){
+			if(threadIdx.x < limit){
+				int valueRight = (threadIdx.x + 1) * (step * 2) - 1+ blockDim.x*blockIdx.x;
 				int valueLeft = valueRight - step;
 				VectorIN[valueRight] = VectorIN[valueRight] + VectorIN[valueLeft];
 			}
 			step *=2;			
             __syncthreads();
-			/*if(threadIdx.x == 0 && blockIdx.x == 0){
+			
+		}
+		/*if(threadIdx.x == 0 && blockIdx.x == 1){
 				for (int i = 0; i < N; ++i){
 					printf("%i ", VectorIN[i]);
 				} printf("\n");
-			}*/
+		}*/
+
+		if(threadIdx.x == 0){
+			VectorADD[blockIdx.x]=VectorIN[DIM*(blockIdx.x+1) - 1];
+			VectorIN[DIM*(blockIdx.x+1) - 1] = 0;	
+
+			//printf("final array: %i, %i \n", VectorADD[blockIdx.x], blockIdx.x);
 		}
-		printf("OK1");
-		if(threadIdx.x == 0)
-			VectorIN[blockDim.x - 1] = 0;	
-        __syncthreads();
+		__syncthreads();
+
+		/*if(threadIdx.x == 0 && blockIdx.x == 1){
+				for (int i = 0; i < N; ++i){
+					printf("%i ", VectorIN[i]);
+				} printf("\n");
+		}*/
+		
 		int limit = 1;
-		for(step = blockDim.x/2; step > 0; limit/=2){
-			if(i < limit){
-				int valueRight = (i*2 + 1) * step - 1;
-				int valueLeft = valueRight - step;
+		for(step = DIM/2; step > 0; step/=2){
+				//int valueRight = (i*2 + 1) * step - 1;
+				//int valueLeft = valueRight - step;
+				int valueLeft = (threadIdx.x*2 + 1) * step - 1 + blockDim.x*blockIdx.x;
+				int valueRight = valueLeft + step;
 				int tmp = VectorIN[valueLeft];
+				__syncthreads();
+			if(threadIdx.x < limit){
 				VectorIN[valueLeft] = VectorIN[valueRight];
 				VectorIN[valueRight] = VectorIN[valueRight] + tmp;
 			}
 			limit *=2;			
             __syncthreads();
 		}
-		printf("OK3");
+		/*
+		if(threadIdx.x == 0 && blockIdx.x == 1){
+				for (int i = 0; i < N; ++i){
+					printf("%i ", VectorIN[i]);
+				} printf("\n");
+		}*/
+
+		/*if(blockIdx.x > 0){
+			printf("%i: %i \t%i\n", tid, VectorIN[tid], finalarray[blockIdx.x-1]);
+			VectorIN[tid]+= finalarray[blockIdx.x-1];
+		}
+		if(N/blockDim.x > 0){
+			if(threadIdx.x == 0)
+				finalarray[blockDim.x-1] = threadIdx.x;
+		}*/
+  }    
 }
 
 void printArray(int* Array, int N, const char str[] = "") {
@@ -68,13 +126,8 @@ void printArray(int* Array, int N, const char str[] = "") {
 
 #include <cstdlib>
 int main(int argc, char *argv[]) {
-	if (argc != 3) {
-        std::cerr << "Usage: " << argv[0] << " N BLOCK_SIZE" << std::endl;
-        return 1;
-    }
 
-    const int N = std::atoi(argv[1]);
-    const int BLOCK_SIZE = std::atoi(argv[2]);
+    const int N = NUM;
 
 	const int blockDim = BLOCK_SIZE;
 	//const int N = BLOCK_SIZE * 131072;
@@ -95,24 +148,45 @@ int main(int argc, char *argv[]) {
 
 	int* VectorIN = new int[N];
 	for (int i = 0; i < N; ++i)
-		VectorIN[i] = distribution(generator);
-	
-	printArray(VectorIN, N, "Initial");
+		VectorIN[i] = distribution(generator);	
 
 	// ------------------- CUDA INIT -------------------------------------------
-
 	int* devVectorIN;
-	SAFE_CALL( cudaMalloc(&devVectorIN, N * sizeof(int)) );
-    SAFE_CALL( cudaMemcpy(devVectorIN, VectorIN, N * sizeof(int), cudaMemcpyHostToDevice) );
+	int* devVectorADD;
+	int* devVectorADD1;
+	printf("N: %i\n", N);
+	printf("NUM_BLOCKS: %i\n", NUM_BLOCKS);
 
+	SAFE_CALL( cudaMalloc(&devVectorIN, N * sizeof(int)) );
+	SAFE_CALL( cudaMalloc(&devVectorADD, (NUM_BLOCKS) * sizeof(int)) );
+	SAFE_CALL( cudaMalloc(&devVectorADD1, (NUM_BLOCKS) * sizeof(int)) );
+	
+	//printArray(VectorIN, N, "Initial");
+    SAFE_CALL( cudaMemcpy(devVectorIN, VectorIN, N * sizeof(int), cudaMemcpyHostToDevice) );
 	int* prefixScan = new int[N];
+
+	int* toprint = new int[N];
 	float dev_time;
 
 	// ------------------- CUDA COMPUTATION 1 ----------------------------------
 	int GridDim = ((N + blockDim - 1) / (blockDim));
 
 	dev_TM.start();
-	PrefixScan<<< GridDim, blockDim>>>(devVectorIN, N);
+	PrefixScan<<< GridDim, blockDim>>>(devVectorIN, N, devVectorADD);
+
+	cudaDeviceSynchronize();
+
+	//printArray(toprint, (NUM_BLOCKS), "Intermediate result:\n");
+	if(NUM_BLOCKS > 1){
+		SAFE_CALL(cudaMemcpy(toprint, devVectorADD, (NUM_BLOCKS) * sizeof(int),
+                           cudaMemcpyDeviceToHost) );
+		PrefixScan<<< 1, NUM_BLOCKS>>>(devVectorADD, NUM_BLOCKS, devVectorADD1);
+	}
+	SAFE_CALL(cudaMemcpy(toprint, devVectorADD, (NUM_BLOCKS) * sizeof(int),
+                           cudaMemcpyDeviceToHost) );
+	//printArray(toprint, (NUM_BLOCKS), "Intermediate result222:\n");
+
+	EndPrefixScan<<<GridDim, blockDim>>>(devVectorIN, N, devVectorADD);
 	dev_TM.stop();
 	dev_time = dev_TM.duration();
 
@@ -131,6 +205,12 @@ int main(int argc, char *argv[]) {
 	int* host_result = new int[N];
 	std::partial_sum(VectorIN, VectorIN + N, host_result);
 
+	// Exclusive prefix sum
+	for(int i = N; i>0; i--){
+		host_result[i] = host_result[i-1]; 
+	}
+	host_result[0] = 0;
+
     host_TM.stop();
 
 	/*printArray(VectorIN, N, "Initial");
@@ -140,8 +220,8 @@ int main(int argc, char *argv[]) {
 	int flag = 0;
 	for (int i = 0; i < N; ++i)
 		if(host_result[i] != prefixScan[i]){
-			printf("%i : %i != %i\n", i, host_result[i], prefixScan[i]);
-				//printf(" ");
+			//printf("%i : %i != %i\n", i, host_result[i], prefixScan[i]);
+			
 			flag = 1;
 			//cudaDeviceReset();
 			//std::exit(EXIT_FAILURE);

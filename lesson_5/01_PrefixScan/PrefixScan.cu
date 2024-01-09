@@ -22,7 +22,7 @@ using namespace timer;
 __global__ void PrefixScan123(int* VectorIN, int N) {
 	//int offset;
 	int i = blockDim.x * blockIdx.x + threadIdx.x;
-	if(i < N)
+	if(i < N){
 		for(int level = 0; level < log2f(N); ++level){
 			//printf("%f \n", floor(log2f(N)));
 			int offset = pow(2, level); //2^level
@@ -37,6 +37,7 @@ __global__ void PrefixScan123(int* VectorIN, int N) {
 
             __syncthreads();
         }
+	}
 }
 
 __global__ void PrefixScan(int* VectorIN, int N) {
