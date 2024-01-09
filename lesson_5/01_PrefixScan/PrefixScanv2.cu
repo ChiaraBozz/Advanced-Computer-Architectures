@@ -1,6 +1,6 @@
 /*
 Prefix Sum for large arrays 
-v1: naive
+v2: work efficient
 */
 #include <iostream>
 #include <chrono>
@@ -19,75 +19,45 @@ using namespace timer;
 
 //const int BLOCK_SIZE = 4;
 
-__global__ void PrefixScan123(int* VectorIN, int N) {
-	//int offset;
-	int i = blockDim.x * blockIdx.x + threadIdx.x;
-	if(i < N)
-		for(int level = 0; level < log2f(N); ++level){
-			//printf("%f \n", floor(log2f(N)));
-			int offset = pow(2, level); //2^level
-			
-			int index = i + offset;
-
-            if (index < N) {
-                int temp = VectorIN[index - offset];
-                __syncthreads();
-                VectorIN[index] += temp;
-            }
-
-            __syncthreads();
-        }
-}
-
 __global__ void PrefixScan(int* VectorIN, int N) {
 	//int offset;
 	int i = blockDim.x * blockIdx.x + threadIdx.x;
+	int step = 1;
 	if(i < N)
 		//for(int level = 0; level < ceil(log2f(N)); ++level){
-		for(int offset = 1; offset < N; offset*=2){
-			//printf("%f \n", ceil(log2f(N)));
-			//int offset = pow(2, level); //2^level
-			//int index = i + offset;
-			//if (i + offset < N) {
-            //if (index < N) {
-			if (i >= offset) {
-                int temp = VectorIN[i];
-				int temp1 = VectorIN[i-offset];
-                __syncthreads(); // Synchronize before updating VectorIN[i]
-                VectorIN[i] = temp + temp1;
-            }
+		printf("OK");
+		for(int limit = blockDim.x/2; limit > 0; limit/=2){
+			if(i < limit){
+				int valueRight = (i + 1) * (step * 2) - 1;
+				int valueLeft = valueRight - step;
+				VectorIN[valueRight] = VectorIN[valueRight] + VectorIN[valueLeft];
+			}
+			step *=2;			
             __syncthreads();
-
-			/*if(i >= offset)
-				VectorIN[i] = VectorIN[i - offset] + VectorIN[i];
-			__syncthreads();
-			
-			if(threadIdx.x == 0 && blockIdx.x == 0){
+			/*if(threadIdx.x == 0 && blockIdx.x == 0){
 				for (int i = 0; i < N; ++i){
 					printf("%i ", VectorIN[i]);
 				} printf("\n");
 			}*/
 		}
-}
-
-__global__ void PrefixScan1(int* VectorIN, int N) {
-    int i = blockDim.x * blockIdx.x + threadIdx.x;
-
-    if (i < N) {
-        for (int stride = 1; stride < N; stride *= 2) {
-            int index = i + stride;
-
-            if (index < N) {
-                int temp = VectorIN[index - stride];
-                __syncthreads();
-                VectorIN[index] += temp;
-            }
-
+		printf("OK1");
+		if(threadIdx.x == 0)
+			VectorIN[blockDim.x - 1] = 0;	
+        __syncthreads();
+		int limit = 1;
+		for(step = blockDim.x/2; step > 0; limit/=2){
+			if(i < limit){
+				int valueRight = (i*2 + 1) * step - 1;
+				int valueLeft = valueRight - step;
+				int tmp = VectorIN[valueLeft];
+				VectorIN[valueLeft] = VectorIN[valueRight];
+				VectorIN[valueRight] = VectorIN[valueRight] + tmp;
+			}
+			limit *=2;			
             __syncthreads();
-        }
-    }
+		}
+		printf("OK3");
 }
-
 
 void printArray(int* Array, int N, const char str[] = "") {
 	std::cout << str;
@@ -95,7 +65,6 @@ void printArray(int* Array, int N, const char str[] = "") {
 		std::cout << std::setw(5) << Array[i] << ' ';
 	std::cout << std::endl << std::endl;
 }
-
 
 #include <cstdlib>
 int main(int argc, char *argv[]) {
@@ -127,6 +96,8 @@ int main(int argc, char *argv[]) {
 	int* VectorIN = new int[N];
 	for (int i = 0; i < N; ++i)
 		VectorIN[i] = distribution(generator);
+	
+	printArray(VectorIN, N, "Initial");
 
 	// ------------------- CUDA INIT -------------------------------------------
 
@@ -162,7 +133,6 @@ int main(int argc, char *argv[]) {
 
     host_TM.stop();
 
-	
 	/*printArray(VectorIN, N, "Initial");
 	printArray(host_result, N, "CPU");
 	printArray(prefixScan, N, "GPU");
