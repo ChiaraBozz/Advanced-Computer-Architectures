@@ -1,6 +1,6 @@
 /*
 Prefix Sum for large arrays 
-v2: work efficient without shared memory
+v2: work efficient with shared memory
 */
 #include <iostream>
 #include <chrono>
@@ -32,54 +32,42 @@ __global__ void EndPrefixScan(int* VectorIN, int N, int* VectorADD) {
 }
 
 __global__ void PrefixScan(int* VectorIN, int N, int* VectorADD) {
-	//int offset;
-	int tid = blockDim.x * blockIdx.x + threadIdx.x;
-	int DIM;
-	if(N < blockDim.x){
-		DIM = N;
-	}else{
-		DIM = blockDim.x;
-	}
-  	if(tid < N){
-		int step = 1;
-		for(int limit = DIM/2; limit > 0; limit/=2){
-			int valueRight = (threadIdx.x + 1) * (step * 2) - 1+ blockDim.x*blockIdx.x;
-			int valueLeft = valueRight - step;
-			if(threadIdx.x < limit){
-				
-				VectorIN[valueRight] = VectorIN[valueRight] + VectorIN[valueLeft];
-			}
-			step *=2;			
-            __syncthreads();
-		}
+ 	__shared__ int shMem[1024];
+ 	int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-		if(threadIdx.x == 0){
-			VectorADD[blockIdx.x]=VectorIN[DIM*(blockIdx.x+1) - 1];
-			VectorIN[DIM*(blockIdx.x+1) - 1] = 0;	
+ 	shMem[threadIdx.x] = VectorIN[tid];
+	__syncthreads();
+	if(tid < N){
+		int step = 1;
+		for (int limit = blockDim.x / 2; limit > 0; limit /= 2) {
+			if (threadIdx.x < limit) {
+				int valueRight = (threadIdx.x + 1) * (step * 2) - 1;
+				int valueLeft = valueRight - step;
+				shMem[valueRight] += shMem[valueLeft];
+			}
+			step *= 2;
+			__syncthreads();
+		}
+		if (threadIdx.x == 0){
+			VectorADD[blockIdx.x]=shMem[blockDim.x - 1];
+			shMem[blockDim.x - 1] = 0;
 		}
 		__syncthreads();
 
-		/*if(threadIdx.x == 0 && blockIdx.x == 1){
-				for (int i = 0; i < N; ++i){
-					printf("%i ", VectorIN[i]);
-				} printf("\n");
-		}*/
 		int limit = 1;
-		for(step = DIM/2; step > 0; step/=2){
-			
-				//int valueRight = (i*2 + 1) * step - 1;
-				//int valueLeft = valueRight - step;
-			if(threadIdx.x < limit){
-				int valueLeft = (threadIdx.x*2 + 1) * step - 1 + blockDim.x*blockIdx.x;
-				int valueRight = valueLeft + step;
-				int tmp = VectorIN[valueLeft];
-				VectorIN[valueLeft] = VectorIN[valueRight];
-				VectorIN[valueRight] = VectorIN[valueRight] + tmp;
+		for(step = blockDim.x/2; step > 0; step/=2){
+			if (threadIdx.x < limit) {
+				int valueRight = (threadIdx.x + 1) * (step * 2) - 1;
+				int valueLeft = valueRight - step;
+				int tmp = shMem[valueLeft];
+				shMem[valueLeft] = shMem[valueRight];
+				shMem[valueRight] += tmp;
 			}
 			limit *=2;	
-			__syncthreads();		
+			__syncthreads();
 		}
-  }    
+		VectorIN[tid] = shMem[threadIdx.x];
+	}
 }
 
 void printArray(int* Array, int N, const char str[] = "") {
@@ -89,6 +77,7 @@ void printArray(int* Array, int N, const char str[] = "") {
 	std::cout << std::endl << std::endl;
 }
 
+#include <cstdlib>
 int main(int argc, char *argv[]) {
 
     const int N = NUM;
