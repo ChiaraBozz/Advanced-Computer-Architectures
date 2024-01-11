@@ -1,6 +1,6 @@
 /*
 Prefix Sum for large arrays 
-v2: work efficient with shared memory
+v3: global with task parallelism for data transfer/kernel computation overlapping
 */
 #include <iostream>
 #include <chrono>
@@ -17,8 +17,9 @@ using namespace timer;
 
 #define DIV(a,b)	(((a) + (b) - 1) / (b))
 
-#define NUM 1024*1024*512
-#define BLOCK_SIZE 1024
+#define NUM 1024*1024*256
+#define BLOCK_SIZE 128//1024
+#define SEGSIZE 1024*1024*2 //512*512
 
 #define NUM_BLOCKS ((NUM) + (BLOCK_SIZE) - 1) / (BLOCK_SIZE)
 
@@ -82,6 +83,7 @@ int main(int argc, char *argv[]) {
     const int N = NUM;
 
 	const int blockDim = BLOCK_SIZE;
+	int SegSize = SEGSIZE; //512;
 	//const int N = BLOCK_SIZE * 131072;
 	// ------------------- INIT ------------------------------------------------
 
@@ -99,9 +101,11 @@ int main(int argc, char *argv[]) {
 	// ------------------ HOST INIT --------------------------------------------
 
 	int* VectorIN = new int[N];
-	for (int i = 0; i < N; ++i)
-		VectorIN[i] = distribution(generator);	
-
+	int* VectorIN_tmp = new int[N];
+	for (int i = 0; i < N; ++i){
+		VectorIN[i] = distribution(generator);
+		VectorIN_tmp[i] = VectorIN[i];
+	}
 	// ------------------- CUDA INIT -------------------------------------------
 	int* devVectorIN;
 	int* devVectorADD;
@@ -124,27 +128,70 @@ int main(int argc, char *argv[]) {
 	// ------------------- CUDA COMPUTATION 1 ----------------------------------
 	int GridDim = ((N + blockDim - 1) / (blockDim));
 
-	printf("GridDim: %i\n", GridDim);
-	printf("blockDim: %i\n", blockDim);
+	//printf("GridDim: %i\n", GridDim);
+	//printf("blockDim: %i\n", blockDim);
 
 	dev_TM.start();
-	PrefixScan<<< GridDim, blockDim>>>(devVectorIN, N, devVectorADD);
+	
+	cudaStream_t stream0, stream1;
+    cudaStreamCreate(&stream0);
+    cudaStreamCreate(&stream1);
 
-	//cudaDeviceSynchronize();
-	//printArray(toprint, (NUM_BLOCKS), "Intermediate result:\n");
-	if(NUM_BLOCKS > 1){
-		//SAFE_CALL(cudaMemcpy(prefixScan, devVectorIN, NUM_BLOCKS * sizeof(int), cudaMemcpyDeviceToHost) );
-		SAFE_CALL(cudaMemcpy(VectorADD, devVectorADD, NUM_BLOCKS * sizeof(int),cudaMemcpyDeviceToHost) );
-		std::partial_sum(VectorADD, VectorADD + NUM_BLOCKS, VectorADD1);
-		//int NewGridDim = ((NUM_BLOCKS + blockDim - 1) / (blockDim));
-		//PrefixScan<<< NewGridDim, blockDim>>>(devVectorADD, NUM_BLOCKS, devVectorADD1); // -> an illegal memory access was encountered(700)
-		SAFE_CALL( cudaMemcpy(devVectorADD1, VectorADD1, NUM_BLOCKS * sizeof(int), cudaMemcpyHostToDevice) );
-		EndPrefixScan<<<GridDim, blockDim>>>(devVectorIN, N, devVectorADD1);
-	}
-	//SAFE_CALL(cudaMemcpy(toprint, devVectorADD, (NUM_BLOCKS) * sizeof(int), cudaMemcpyDeviceToHost) );
-	//printArray(toprint, (NUM_BLOCKS), "Intermediate result222:\n");
-	//SAFE_CALL(cudaMemcpy(prefixScan, devVectorIN, N * sizeof(int), cudaMemcpyDeviceToHost) );
+    int *d_A0; // device memory for stream 0
+    int *d_A1; // device memory for stream 1
 
+	int *d_Add0; // device memory for stream 0
+    int *d_Add1; // device memory for stream 1
+
+    // cudaMalloc for d_A0, d_B0, d_C0, d_A1, d_B1, d_C1 go here
+    SAFE_CALL( cudaMalloc( &d_A0, SegSize * sizeof(int) ));
+    SAFE_CALL( cudaMalloc( &d_A1, SegSize * sizeof(int) ));
+    SAFE_CALL( cudaMalloc( &d_Add0, SegSize * sizeof(int) ));
+    SAFE_CALL( cudaMalloc( &d_Add1, SegSize * sizeof(int) ));
+
+    int j=0;
+	int DimGrid = DIV(SegSize, BLOCK_SIZE);
+	printf("SegSize: %i\n", SegSize);
+	printf("BLOCK_SIZE: %i\n", BLOCK_SIZE);
+	printf("DimGrid: %i\n", DimGrid);
+
+    for (int i = 0; i < N; i += SegSize * 2) {
+        cudaMemcpyAsync(d_A0, VectorIN + i, SegSize * sizeof(int), cudaMemcpyHostToDevice, stream0);
+        cudaMemcpyAsync(d_A1, VectorIN + i + SegSize, SegSize * sizeof(int), cudaMemcpyHostToDevice, stream1);
+        
+		//printArray(VectorIN + i, SegSize, "d_A0");
+		//printArray(VectorIN + i + SegSize, SegSize, "d_A1");
+
+        PrefixScan<<<DimGrid, BLOCK_SIZE, 0, stream0>>>(d_A0, SegSize, d_Add0);
+        PrefixScan<<<DimGrid, BLOCK_SIZE, 0, stream1>>>(d_A1, SegSize, d_Add1);
+
+        cudaMemcpyAsync(VectorIN_tmp + i, d_A0, SegSize * sizeof(int), cudaMemcpyDeviceToHost, stream0);
+        cudaMemcpyAsync(VectorIN_tmp + i + SegSize, d_A1, SegSize * sizeof(int), cudaMemcpyDeviceToHost, stream1);
+        
+		//printArray(VectorIN_tmp + i, SegSize, "tmp0");
+		//printArray(VectorIN_tmp + i + SegSize, SegSize, "tmp1");
+
+		cudaMemcpyAsync(VectorADD + j, d_Add0, DimGrid * sizeof(int), cudaMemcpyDeviceToHost, stream0);
+        cudaMemcpyAsync(VectorADD + j + DimGrid, d_Add1, DimGrid * sizeof(int), cudaMemcpyDeviceToHost, stream1);
+            
+        j += 2*DimGrid;
+         
+        //cudaStreamSynchronize(stream0);
+        //cudaStreamSynchronize(stream1);
+    }
+	/*printf("j: %i\n", j);
+	printArray(VectorADD, j, "ADD");
+	printArray(VectorIN, N, "INI");
+	printArray(VectorIN_tmp, N, "TMP");*/
+	
+	/**/
+	std::partial_sum(VectorADD, VectorADD + j, VectorADD1);
+	//printArray(VectorADD1, j, "2AD");
+    SAFE_CALL( cudaMemcpy(devVectorADD1, VectorADD1, j * sizeof(int), cudaMemcpyHostToDevice) );
+	SAFE_CALL( cudaMemcpy(devVectorIN, VectorIN_tmp, N * sizeof(int), cudaMemcpyHostToDevice) );
+		
+	EndPrefixScan<<<GridDim, blockDim>>>(devVectorIN, N, devVectorADD1);
+	
 	dev_TM.stop();
 	dev_time = dev_TM.duration();
 
@@ -171,10 +218,9 @@ int main(int argc, char *argv[]) {
 
     host_TM.stop();
 
-	/*printArray(VectorIN, N, "INI");
-	printArray(host_result, N, "CPU");
-	printArray(prefixScan, N, "GPU");
-	*/
+	//printArray(host_result, N, "CPU");
+	//printArray(prefixScan, N, "GPU");
+	
 	int flag = 0;
 	for (int i = 0; i < N; ++i)
 		if(host_result[i] != prefixScan[i]){

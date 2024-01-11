@@ -18,6 +18,8 @@ using namespace timer;
 //#define BLOCK_SIZE 256
 #define SHMEM_SIZE 1024
 
+// interesting config: N 536870912  BLOCK_SIZE 128  SEGSIZE 1024*1024*2
+
 __global__ void ReduceKernel(int* VectorIN, int N) {
     int globalIdx = threadIdx.x + blockIdx.x * blockDim.x;
     __shared__ int shmem[SHMEM_SIZE];
@@ -55,11 +57,11 @@ int main(int argc, char *argv[]) {
 
     const int N = std::atoi(argv[1]);
     const int BLOCK_SIZE = std::atoi(argv[2]);
-    int SegSize = 1024*1024*64; //256;
+    int SegSize = 8;//1024*1024*2;//*1024*64; //256;
     if(SegSize > N)
         SegSize = N;
     
-    printf("%i", SegSize);
+    printf("%i\n", SegSize);
     // ------------------- INIT ------------------------------------------------
     // Random Engine Initialization
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
@@ -136,7 +138,7 @@ int main(int argc, char *argv[]) {
             ReduceKernel<<<DimGrid, BLOCK_SIZE, 0, stream0>>>(d_A0, SegSize);
             ReduceKernel<<<DimGrid, BLOCK_SIZE, 0, stream1>>>(d_A1, SegSize);
 
-            cudaMemcpyAsync(h_VectorIN_tmp + j, d_A0, SegSize * sizeof(int), cudaMemcpyDeviceToHost, stream0);
+            cudaMemcpyAsync(h_VectorIN_tmp + j, d_A0, DimGrid * sizeof(int), cudaMemcpyDeviceToHost, stream0);
             cudaMemcpyAsync(h_VectorIN_tmp + j + DimGrid, d_A1, DimGrid * sizeof(int), cudaMemcpyDeviceToHost, stream1);
             //printf("SegSize / BLOCK_SIZE: %i", SegSize / BLOCK_SIZE);
 
@@ -160,11 +162,11 @@ int main(int argc, char *argv[]) {
 
             j += 2*DimGrid;
         }
-        cudaStreamSynchronize(stream0);
-        cudaStreamSynchronize(stream1);
+        //cudaStreamSynchronize(stream0);
+        //cudaStreamSynchronize(stream1);
     }
-
-    /*int j=0;
+    /* DA CANCELLARE
+    int j=0;
     for (int i = 0; i < N; i += SegSize * 2) {
         cudaMemcpyAsync(d_A0, h_VectorIN_tmp + i, SegSize * sizeof(int), cudaMemcpyHostToDevice, stream0);
         cudaMemcpyAsync(d_A1, h_VectorIN_tmp + i + SegSize, SegSize * sizeof(int), cudaMemcpyHostToDevice, stream1);
@@ -203,6 +205,8 @@ int main(int argc, char *argv[]) {
         cudaStreamSynchronize(stream1);
     }
     */
+   sum = std::accumulate(h_VectorIN_tmp, h_VectorIN_tmp + j, 0);
+   /*FATTO 2a PARTE IN GPU
     SAFE_CALL( cudaMemcpy(devVectorIN, h_VectorIN_tmp, N * sizeof(int), cudaMemcpyHostToDevice) ); //to refine
     
     j = DIV(N, BLOCK_SIZE);
@@ -229,12 +233,12 @@ int main(int argc, char *argv[]) {
     }while(GridDim != 1);
     //printf("GridDim: %i, %i\t%i\n", GridDim, i, dimArray);
     ReduceKernel<<< GridDim , BLOCK_SIZE>>>(devVectorIN, dimArray); 
-    
+    */
 	dev_TM.stop();
 	dev_time = dev_TM.duration();
 	CHECK_CUDA_ERROR;
 
-	SAFE_CALL( cudaMemcpy(&sum, devVectorIN, sizeof(int), cudaMemcpyDeviceToHost) );
+	//SAFE_CALL( cudaMemcpy(&sum, devVectorIN, sizeof(int), cudaMemcpyDeviceToHost) );
 
 	// ------------------- HOST ------------------------------------------------
     host_TM.start();
