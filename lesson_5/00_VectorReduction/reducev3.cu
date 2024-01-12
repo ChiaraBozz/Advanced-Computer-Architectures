@@ -57,7 +57,7 @@ int main(int argc, char *argv[]) {
 
     const int N = std::atoi(argv[1]);
     const int BLOCK_SIZE = std::atoi(argv[2]);
-    int SegSize = 8;//1024*1024*2;//*1024*64; //256;
+    int SegSize = 1024*1024*2;//*1024*64; //256;
     if(SegSize > N)
         SegSize = N;
     
