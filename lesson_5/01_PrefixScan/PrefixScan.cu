@@ -49,13 +49,14 @@ __global__ void PrefixScan(int* VectorIN, int N, int* VectorAdd) {
 	int i = threadIdx.x;
 
 	shMem[threadIdx.x] = VectorIN[tid];
+	__syncthreads();
 
 	if(tid < N){
 		for(int offset = 1; offset < blockDim.x; offset*=2){
 			if (i >= offset) {
                 int temp = shMem[i];
 				int temp1 = shMem[i-offset];
-                //__syncthreads(); // Synchronize before updating VectorIN[i]
+                __syncthreads(); // Synchronize before updating VectorIN[i]
                 shMem[i] = temp + temp1;
             }
             __syncthreads();
@@ -65,6 +66,38 @@ __global__ void PrefixScan(int* VectorIN, int N, int* VectorAdd) {
 			VectorAdd[blockIdx.x] = shMem[i];
 	}
 }
+
+__global__ void PrefixScangg(int* VectorIN, int N, int* VectorAdd) {
+    __shared__ int shMem[1024 + 1];  // Add padding to avoid bank conflicts
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = threadIdx.x;
+
+    shMem[i] = (tid < N) ? VectorIN[tid] : 0;
+    __syncthreads();
+
+    for (int offset = 1; offset < blockDim.x; offset *= 2) {
+        int temp = 0;
+        if (i >= offset) {
+            temp = shMem[i - offset];
+        }
+        __syncthreads();
+
+        if (i >= offset) {
+            shMem[i] += temp;
+        }
+        __syncthreads();
+    }
+
+    if (tid < N) {
+        VectorIN[tid] = shMem[i];
+        if (i == blockDim.x - 1) {
+            VectorAdd[blockIdx.x] = shMem[blockDim.x];  // Store the block sum
+        }
+    }
+}
+
+
+
 __global__ void EndPrefixScan(int* VectorIN, int N, int* VectorADD) {
 	int tid = blockDim.x * blockIdx.x + threadIdx.x;
 	//int i = (tid) * (blockIdx.x);
@@ -73,10 +106,10 @@ __global__ void EndPrefixScan(int* VectorIN, int N, int* VectorADD) {
 	
 		if(tid<N)
 			//printf("%i : %i, ", tid, blockIdx.x);
-			if(blockIdx.x > 0){
+			//if(blockIdx.x > 0){
 				//printf("\n%i : %i + %i\n", tid, VectorIN[tid], toSum);
 				VectorIN[tid]+= toSum;
-			}
+			//}
 	}
 }
 
@@ -137,7 +170,8 @@ int main(int argc, char *argv[]) {
 	dev_TM.start();
 	PrefixScan<<< GridDim, blockDim>>>(devVectorIN, N, devVectorADD);
 	
-	cudaDeviceSynchronize();
+	//cudaDeviceSynchronize();
+	//printArray(VectorIN, N, "INI");
 	//SAFE_CALL(cudaMemcpy(prefixScan, devVectorIN, N * sizeof(int),
     //                       cudaMemcpyDeviceToHost) );
 	//printArray(prefixScan, N, "2GP");
@@ -195,7 +229,7 @@ int main(int argc, char *argv[]) {
 				//printf(" ");
 			flag = 1;
 			//cudaDeviceReset();
-			//std::exit(EXIT_FAILURE);
+			std::exit(EXIT_FAILURE);
 		}
 	if(flag == 1){
 		std::cerr << " Error! :  prefixScan" << std::endl << std::endl;
